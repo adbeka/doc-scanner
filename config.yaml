@@ -1,0 +1,43 @@
+# Document Scanner Configuration
+
+# Default Settings
+default:
+  input_source: "file"  # file, camera, folder
+  output_format: "pdf"  # pdf, jpg, png
+  color_mode: "bw"      # bw, grayscale, color
+  
+# Image Processing
+processing:
+  edge_detection:
+    threshold1: 50
+    threshold2: 150
+  blur:
+    kernel_size: 5
+  resize:
+    max_width: 1500
+    max_height: 1500
+    
+# Document Detection
+detection:
+  min_area: 10000
+  approx_epsilon: 0.02
+  
+# Output Settings
+output:
+  pdf_quality: 95
+  image_dpi: 300
+  default_folder: "data/output"
+  
+# GUI Settings
+gui:
+  window_width: 1200
+  window_height: 800
+  theme: "light"  # light, dark
+  
+# Camera Settings
+camera:
+  default_device: 0
+  resolution:
+    width: 1920
+    height: 1080
+  fps: 30

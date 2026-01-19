@@ -1,0 +1,159 @@
+
+═══════════════════════════════════════════════════════════════════
+                    DOCUMENT SCANNER v1.0.0
+                      Getting Started Guide
+═══════════════════════════════════════════════════════════════════
+
+🎉 CONGRATULATIONS! Your document scanner app is ready!
+
+═══════════════════════════════════════════════════════════════════
+📋 WHAT YOU HAVE
+═══════════════════════════════════════════════════════════════════
+
+✅ Full-featured document scanner application
+✅ Automatic document detection
+✅ Perspective correction
+✅ Multiple enhancement modes
+✅ Professional GUI interface
+✅ Comprehensive test suite
+✅ Complete documentation
+
+═══════════════════════════════════════════════════════════════════
+🚀 QUICK START (3 Steps)
+═══════════════════════════════════════════════════════════════════
+
+Step 1: Install Dependencies
+─────────────────────────────
+Linux/macOS:
+  ./setup.sh
+
+Windows:
+  setup.bat
+
+Or manually:
+  python -m venv venv
+  source venv/bin/activate  # Windows: venv\Scripts\activate
+  pip install -r requirements.txt
+
+
+Step 2: Run the Application
+─────────────────────────────
+  python main.py
+
+
+Step 3: Scan a Document
+─────────────────────────────
+  1. Click "Load Image"
+  2. Select a photo of a document
+  3. Click "Scan Document"
+  4. Adjust settings (optional)
+  5. Click "Save Result"
+
+═══════════════════════════════════════════════════════════════════
+📚 DOCUMENTATION FILES
+═══════════════════════════════════════════════════════════════════
+
+README.md           - Complete documentation & installation
+QUICKSTART.md       - 5-minute quick start guide
+DEVELOPMENT.md      - Developer documentation
+FEATURES.md         - Complete feature checklist
+PROJECT_STATUS.md   - Current project status
+CHANGELOG.md        - Version history
+
+═══════════════════════════════════════════════════════════════════
+🎓 LEARNING PATH
+═══════════════════════════════════════════════════════════════════
+
+New Users:
+  1. Read QUICKSTART.md (5 minutes)
+  2. Run setup.sh/setup.bat
+  3. Try python main.py
+  4. Scan your first document!
+
+Developers:
+  1. Read DEVELOPMENT.md
+  2. Review src/ code
+  3. Run tests: pytest tests/
+  4. Start contributing!
+
+═══════════════════════════════════════════════════════════════════
+🛠️ PROJECT STRUCTURE
+═══════════════════════════════════════════════════════════════════
+
+src/
+  scanner.py          - Core document detection
+  image_processor.py  - Enhancement algorithms
+  utils.py           - Helper functions
+  constants.py       - Configuration
+
+gui/
+  main_window.py     - GUI interface
+
+tests/
+  test_scanner.py    - Test suite
+
+data/
+  output/           - Scanned documents
+  sample_images/    - Test images
+
+═══════════════════════════════════════════════════════════════════
+💡 FEATURES
+═══════════════════════════════════════════════════════════════════
+
+✅ Automatic document edge detection
+✅ Perspective correction
+✅ Black & White / Grayscale / Color modes
+✅ Brightness & Contrast adjustment
+✅ Auto-enhancement
+✅ Multiple output formats (PDF, JPG, PNG, TIFF)
+✅ Real-time preview
+✅ Professional GUI
+
+═══════════════════════════════════════════════════════════════════
+🎯 USE CASES
+═══════════════════════════════════════════════════════════════════
+
+• Scan receipts for expense reports
+• Digitize paper documents
+• Convert photos to flat scans
+• Archive important papers
+• Create PDFs from photos
+• Enhance document readability
+
+═══════════════════════════════════════════════════════════════════
+🆘 TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════
+
+Problem: "Could not detect document"
+Solution: Ensure good lighting, clear edges, contrasting background
+
+Problem: Application won't start
+Solution: pip install -r requirements.txt --force-reinstall
+
+Problem: Poor scan quality
+Solution: Use higher resolution images, try Auto Enhance
+
+═══════════════════════════════════════════════════════════════════
+🔮 COMING SOON (Phase 2)
+═══════════════════════════════════════════════════════════════════
+
+• Camera integration with live preview
+• Batch processing
+• Manual corner adjustment
+• Multi-page PDF support
+• Dark theme
+• Keyboard shortcuts
+
+═══════════════════════════════════════════════════════════════════
+📞 SUPPORT & CONTACT
+═══════════════════════════════════════════════════════════════════
+
+GitHub: https://github.com/adbeka/doc-scanner
+Issues: https://github.com/adbeka/doc-scanner/issues
+License: MIT
+
+═══════════════════════════════════════════════════════════════════
+
+                    🎉 ENJOY SCANNING! 🎉
+
+═══════════════════════════════════════════════════════════════════
