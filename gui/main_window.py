@@ -6,7 +6,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QFileDialog, QComboBox, QSlider, QGroupBox, QMessageBox,
-    QSplitter, QApplication
+    QSplitter, QApplication, QProgressDialog
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
@@ -17,7 +17,9 @@ import numpy as np
 sys.path.append(str(Path(__file__).parent.parent))
 from src.scanner import DocumentScanner
 from src.image_processor import ImageProcessor
+from src.batch_processor import BatchProcessor
 from src import constants
+from gui.edge_adjuster import EdgeAdjusterDialog
 
 
 class ScannerThread(QThread):
@@ -48,8 +50,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.scanner = DocumentScanner()
         self.processor = ImageProcessor()
+        self.batch_processor = BatchProcessor(self.scanner, self.processor)
         self.current_image = None
         self.scanned_image = None
+        self.rotation_angle = 0
         self.output_folder = "data/output"
         
         self.init_ui()
@@ -100,6 +104,10 @@ class MainWindow(QMainWindow):
         self.btn_load.clicked.connect(self.load_image)
         input_layout.addWidget(self.btn_load)
         
+        self.btn_batch = QPushButton("Batch Process Folder")
+        self.btn_batch.clicked.connect(self.batch_process)
+        input_layout.addWidget(self.btn_batch)
+        
         self.btn_camera = QPushButton("Capture from Camera")
         self.btn_camera.clicked.connect(self.capture_from_camera)
         input_layout.addWidget(self.btn_camera)
@@ -116,6 +124,11 @@ class MainWindow(QMainWindow):
         self.btn_scan.setEnabled(False)
         self.btn_scan.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 10px; font-weight: bold; }")
         scan_layout.addWidget(self.btn_scan)
+        
+        self.btn_adjust_edges = QPushButton("Adjust Edges Manually")
+        self.btn_adjust_edges.clicked.connect(self.adjust_edges_manually)
+        self.btn_adjust_edges.setEnabled(False)
+        scan_layout.addWidget(self.btn_adjust_edges)
         
         scan_group.setLayout(scan_layout)
         layout.addWidget(scan_group)
@@ -154,6 +167,20 @@ class MainWindow(QMainWindow):
         self.btn_auto_enhance.clicked.connect(self.auto_enhance)
         self.btn_auto_enhance.setEnabled(False)
         enhance_layout.addWidget(self.btn_auto_enhance)
+        
+        # Rotation controls
+        enhance_layout.addWidget(QLabel("Rotate:"))
+        rotation_layout = QHBoxLayout()
+        self.btn_rotate_left = QPushButton("⟲ 90°")
+        self.btn_rotate_left.clicked.connect(lambda: self.rotate_image(-90))
+        self.btn_rotate_left.setEnabled(False)
+        rotation_layout.addWidget(self.btn_rotate_left)
+        
+        self.btn_rotate_right = QPushButton("⟳ 90°")
+        self.btn_rotate_right.clicked.connect(lambda: self.rotate_image(90))
+        self.btn_rotate_right.setEnabled(False)
+        rotation_layout.addWidget(self.btn_rotate_right)
+        enhance_layout.addLayout(rotation_layout)
         
         enhance_group.setLayout(enhance_layout)
         layout.addWidget(enhance_group)
@@ -231,6 +258,7 @@ class MainWindow(QMainWindow):
                 self.current_image = self.scanner.original_image.copy()
                 self.display_image(self.current_image, self.label_original)
                 self.btn_scan.setEnabled(True)
+                self.btn_adjust_edges.setEnabled(True)
                 self.status_label.setText(f"Loaded: {Path(file_path).name}")
             else:
                 QMessageBox.critical(self, "Error", "Failed to load image")
@@ -264,6 +292,8 @@ class MainWindow(QMainWindow):
         self.display_image(result, self.label_processed)
         self.btn_save.setEnabled(True)
         self.btn_auto_enhance.setEnabled(True)
+        self.btn_rotate_left.setEnabled(True)
+        self.btn_rotate_right.setEnabled(True)
         self.btn_scan.setEnabled(True)
         self.status_label.setText("Document scanned successfully!")
         
@@ -355,15 +385,173 @@ class MainWindow(QMainWindow):
         """Reset the application"""
         self.current_image = None
         self.scanned_image = None
+        self.rotation_angle = 0
         self.label_original.clear()
         self.label_processed.clear()
         self.btn_scan.setEnabled(False)
+        self.btn_adjust_edges.setEnabled(False)
         self.btn_save.setEnabled(False)
         self.btn_auto_enhance.setEnabled(False)
+        self.btn_rotate_left.setEnabled(False)
+        self.btn_rotate_right.setEnabled(False)
         self.slider_brightness.setValue(0)
         self.slider_contrast.setValue(0)
         self.combo_color_mode.setCurrentIndex(0)
         self.status_label.setText("Ready")
+    
+    def adjust_edges_manually(self):
+        """Open manual edge adjustment dialog"""
+        if self.current_image is None:
+            return
+        
+        # First detect document to get initial corners
+        corners = self.scanner.detect_document(self.current_image)
+        
+        if corners is None:
+            # If auto-detection fails, provide default corners
+            h, w = self.current_image.shape[:2]
+            margin = 50
+            corners = np.array([
+                [margin, margin],
+                [w - margin, margin],
+                [w - margin, h - margin],
+                [margin, h - margin]
+            ], dtype=np.float32)
+            QMessageBox.information(
+                self,
+                "Auto-detection Failed",
+                "Could not automatically detect document edges.\n"
+                "Default corners have been set. Please adjust them manually."
+            )
+        
+        # Show edge adjustment dialog
+        adjusted_corners = EdgeAdjusterDialog.adjust_edges(
+            self.current_image,
+            corners,
+            self
+        )
+        
+        if adjusted_corners is not None:
+            # Scan with manual corners
+            self.status_label.setText("Scanning with manual edges...")
+            QApplication.processEvents()
+            
+            result = self.scanner.scan_document(
+                self.current_image,
+                manual_corners=adjusted_corners
+            )
+            
+            if result is not None:
+                self.scanned_image = result
+                self.display_image(result, self.label_processed)
+                self.btn_save.setEnabled(True)
+                self.btn_auto_enhance.setEnabled(True)
+                self.btn_rotate_left.setEnabled(True)
+                self.btn_rotate_right.setEnabled(True)
+                self.status_label.setText("Document scanned with manual edges!")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to scan with adjusted edges")
+    
+    def rotate_image(self, angle):
+        """Rotate the scanned image"""
+        if self.scanned_image is None:
+            return
+        
+        self.rotation_angle = (self.rotation_angle + angle) % 360
+        rotated = self.processor.rotate_image(self.scanned_image, angle)
+        self.scanned_image = rotated
+        
+        # Reapply current enhancements
+        self.apply_enhancements()
+        self.status_label.setText(f"Rotated {angle}\u00b0")
+    
+    def batch_process(self):
+        """Process multiple images from a folder"""
+        # Select input folder
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Folder with Images to Scan",
+            ""
+        )
+        
+        if not folder:
+            return
+        
+        # Select output folder
+        output_folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Output Folder",
+            "data/output"
+        )
+        
+        if not output_folder:
+            return
+        
+        # Get current settings
+        color_mode_map = {
+            "Black & White": "bw",
+            "Grayscale": "grayscale",
+            "Color": "color"
+        }
+        color_mode = color_mode_map[self.combo_color_mode.currentText()]
+        output_format = self.combo_format.currentText().lower()
+        brightness = self.slider_brightness.value()
+        contrast = self.slider_contrast.value()
+        
+        # Create progress dialog
+        progress = QProgressDialog("Processing images...", "Cancel", 0, 100, self)
+        progress.setWindowTitle("Batch Processing")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        
+        def update_progress(current, total, filename):
+            progress.setValue(int((current / total) * 100))
+            progress.setLabelText(f"Processing {current}/{total}: {filename}")
+            QApplication.processEvents()
+            
+            if progress.wasCanceled():
+                raise Exception("Cancelled by user")
+        
+        try:
+            # Process folder
+            results = self.batch_processor.process_folder(
+                folder,
+                output_folder,
+                color_mode=color_mode,
+                output_format=output_format,
+                progress_callback=update_progress,
+                brightness=brightness,
+                contrast=contrast
+            )
+            
+            progress.close()
+            
+            # Show results
+            message = (
+                f"Batch Processing Complete!\n\n"
+                f"Total: {results['total']}\n"
+                f"Success: {results['success']}\n"
+                f"Failed: {results['failed']}\n\n"
+                f"Output folder: {output_folder}"
+            )
+            
+            if results['failed'] > 0:
+                message += "\n\nFailed files:\n"
+                for detail in results['details']:
+                    if detail['status'] == 'failed':
+                        message += f"- {detail['filename']}: {detail.get('error', 'Unknown')}\n"
+            
+            QMessageBox.information(self, "Batch Processing Results", message)
+            self.status_label.setText(
+                f"Batch processing complete: {results['success']}/{results['total']} successful"
+            )
+            
+        except Exception as e:
+            progress.close()
+            if "Cancelled" not in str(e):
+                QMessageBox.critical(self, "Batch Processing Error", str(e))
+            else:
+                self.status_label.setText("Batch processing cancelled")
     
     def display_image(self, cv_image, label):
         """Display OpenCV image in QLabel"""

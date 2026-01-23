@@ -10,6 +10,34 @@ class ImageProcessor:
     """Image enhancement and processing utilities"""
     
     @staticmethod
+    def rotate_image(image: np.ndarray, angle: int) -> np.ndarray:
+        """
+        Rotate image by specified angle.
+        
+        Args:
+            image: Input image
+            angle: Rotation angle (90, 180, 270, or -90)
+            
+        Returns:
+            Rotated image
+        """
+        if angle == 90 or angle == -270:
+            return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+        elif angle == 180 or angle == -180:
+            return cv2.rotate(image, cv2.ROTATE_180)
+        elif angle == 270 or angle == -90:
+            return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        else:
+            # For arbitrary angles, use getRotationMatrix2D
+            h, w = image.shape[:2]
+            center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            return cv2.warpAffine(image, M, (w, h), 
+                                 flags=cv2.INTER_LINEAR,
+                                 borderMode=cv2.BORDER_CONSTANT,
+                                 borderValue=(255, 255, 255))
+    
+    @staticmethod
     def convert_to_bw(image: np.ndarray, threshold_method: str = 'adaptive') -> np.ndarray:
         """
         Convert image to black and white.
