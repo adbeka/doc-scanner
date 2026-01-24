@@ -36,3 +36,15 @@ SUPPORTED_IMAGE_FORMATS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
 # GUI constants
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 800
+
+# Filter categories
+FILTER_CATEGORY_ARTISTIC = ['sepia', 'vintage', 'sketch', 'oil_painting', 'cartoon']
+FILTER_CATEGORY_EFFECTS = ['emboss', 'posterize', 'pixelate', 'vignette', 'edge_enhance']
+FILTER_CATEGORY_COLOR = ['invert', 'warm', 'cool', 'high_contrast_bw']
+FILTER_CATEGORY_BLUR = ['blur', 'motion_blur']
+FILTER_CATEGORY_DOCUMENT = ['document_scan']
+
+# Template categories
+TEMPLATE_CATEGORY_DOCUMENT = ['text_document', 'invoice', 'book_page']
+TEMPLATE_CATEGORY_ID = ['id_card', 'passport', 'business_card']
+TEMPLATE_CATEGORY_OTHER = ['receipt', 'whiteboard', 'photo_document', 'magazine']

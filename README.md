@@ -13,10 +13,25 @@ A powerful Python-based document scanner application with a modern GUI. Automati
   - Color preservation
   - Auto-enhancement
   - Brightness/Contrast adjustment
+- ✅ **Document Templates** - 10 predefined templates for common document types:
+  - Text Documents (A4, Letter)
+  - Receipts
+  - Business Cards
+  - ID Cards & Passports
+  - Invoices
+  - Whiteboards
+  - Book Pages
+  - And more!
+- ✅ **Image Filters** - 17+ professional filters including:
+  - Artistic: Sepia, Vintage, Sketch, Cartoon, Oil Painting
+  - Effects: Emboss, Posterize, Pixelate, Vignette
+  - Color: Warm, Cool, Invert, High Contrast
+  - Document: Specialized document scan filter
+  - Blur: Artistic and Motion blur
 - ✅ **Multiple Input Sources**
   - Load images from files
   - Camera capture (coming soon)
-  - Batch processing (coming soon)
+  - Batch processing
 - ✅ **Multiple Output Formats** - Save as PDF, JPG, PNG, or TIFF
 - ✅ **User-Friendly GUI** - Clean, intuitive interface built with PyQt5
 
@@ -75,11 +90,52 @@ python main.py
    - Choose color mode (B&W, Grayscale, or Color)
    - Adjust brightness and contrast sliders
    - Click "Auto Enhance" for automatic optimization
+   - Apply document templates for specific document types
+   - Add artistic or effect filters
 
-4. **Save the Result**
+4. **Apply Templates & Filters (Optional)**
+   - **Templates**: Select a document template (Receipt, Business Card, etc.)
+     - Click "Apply Template" to automatically optimize for that document type
+   - **Filters**: Choose an image filter (Sepia, Vintage, etc.)
+     - Click "Apply Filter" to add artistic or enhancement effects
+   - Templates and filters can be combined for unique results
+
+5. **Save the Result**
    - Click "Save Result"
    - Choose output format
    - Select destination folder
+
+### Document Templates
+
+Document templates are optimized presets for specific document types:
+
+- **Text Document**: Perfect for letters, contracts, forms
+- **Receipt**: High contrast for faded receipts
+- **Business Card**: Preserves colors and logos
+- **ID Card**: Optimized for ID cards with photos
+- **Invoice**: Clean, crisp tables and text
+- **Whiteboard**: Removes background, enhances markers
+- **Book Page**: Optimal for scanning books
+- **Magazine**: Preserves photos and colors
+- **Passport**: Official document quality
+- **Photo Document**: Mixed text and photos
+
+See [TEMPLATES_AND_FILTERS.md](TEMPLATES_AND_FILTERS.md) for detailed documentation.
+
+### Image Filters
+
+Apply professional filters to your scans:
+
+- **Artistic**: Sepia, Vintage, Sketch, Cartoon, Oil Painting
+- **Effects**: Emboss, Posterize, Pixelate, Vignette, Edge Enhance
+- **Color**: Warm, Cool, Invert, High Contrast B&W
+- **Blur**: Artistic Blur, Motion Blur
+- **Document**: Specialized document scan filter
+
+Run the demo to see all filters in action:
+```bash
+python demo_features.py
+```
 
 ### Tips for Best Results
 
@@ -96,18 +152,27 @@ doc-scanner/
 ├── src/                      # Core scanning logic
 │   ├── scanner.py           # Document detection and transformation
 │   ├── image_processor.py   # Image enhancement functions
+│   ├── templates.py         # Document templates
+│   ├── filters.py           # Image filters
+│   ├── batch_processor.py   # Batch processing
 │   ├── utils.py             # Helper utilities
 │   └── constants.py         # Configuration constants
 ├── gui/                     # GUI components
-│   └── main_window.py       # Main application window
+│   ├── main_window.py       # Main application window
+│   └── edge_adjuster.py     # Manual edge adjustment
 ├── tests/                   # Unit tests
+│   ├── test_scanner.py
+│   ├── test_templates.py
+│   └── test_filters.py
 ├── data/
 │   ├── sample_images/       # Test images
 │   └── output/             # Scanned outputs
 ├── main.py                  # Application entry point
+├── demo_features.py         # Demo for templates & filters
 ├── config.yaml             # Configuration file
 ├── requirements.txt        # Python dependencies
 ├── setup.py               # Package setup
+├── TEMPLATES_AND_FILTERS.md # Templates & filters documentation
 └── README.md              # This file
 ```
 

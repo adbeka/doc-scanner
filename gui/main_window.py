@@ -18,6 +18,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.scanner import DocumentScanner
 from src.image_processor import ImageProcessor
 from src.batch_processor import BatchProcessor
+from src.templates import TemplateManager
+from src.filters import FilterManager
 from src import constants
 from gui.edge_adjuster import EdgeAdjusterDialog
 
@@ -132,6 +134,48 @@ class MainWindow(QMainWindow):
         
         scan_group.setLayout(scan_layout)
         layout.addWidget(scan_group)
+        
+        # Templates group
+        template_group = QGroupBox("Document Templates")
+        template_layout = QVBoxLayout()
+        
+        template_layout.addWidget(QLabel("Template:"))
+        self.combo_template = QComboBox()
+        self.combo_template.addItem("None (Manual)")
+        template_names = TemplateManager.get_template_names()
+        for name in sorted(template_names):
+            display_name = name.replace('_', ' ').title()
+            self.combo_template.addItem(display_name, name)
+        template_layout.addWidget(self.combo_template)
+        
+        self.btn_apply_template = QPushButton("Apply Template")
+        self.btn_apply_template.clicked.connect(self.apply_template)
+        self.btn_apply_template.setEnabled(False)
+        template_layout.addWidget(self.btn_apply_template)
+        
+        template_group.setLayout(template_layout)
+        layout.addWidget(template_group)
+        
+        # Filters group
+        filter_group = QGroupBox("Image Filters")
+        filter_layout = QVBoxLayout()
+        
+        filter_layout.addWidget(QLabel("Filter:"))
+        self.combo_filter = QComboBox()
+        self.combo_filter.addItem("None")
+        filter_names = FilterManager.get_filter_names()
+        for name in sorted(filter_names):
+            display_name = name.replace('_', ' ').title()
+            self.combo_filter.addItem(display_name, name)
+        filter_layout.addWidget(self.combo_filter)
+        
+        self.btn_apply_filter = QPushButton("Apply Filter")
+        self.btn_apply_filter.clicked.connect(self.apply_filter)
+        self.btn_apply_filter.setEnabled(False)
+        filter_layout.addWidget(self.btn_apply_filter)
+        
+        filter_group.setLayout(filter_layout)
+        layout.addWidget(filter_group)
         
         # Enhancement group
         enhance_group = QGroupBox("Enhancement")
@@ -295,6 +339,8 @@ class MainWindow(QMainWindow):
         self.btn_rotate_left.setEnabled(True)
         self.btn_rotate_right.setEnabled(True)
         self.btn_scan.setEnabled(True)
+        self.btn_apply_template.setEnabled(True)
+        self.btn_apply_filter.setEnabled(True)
         self.status_label.setText("Document scanned successfully!")
         
         # Show preview with detection
@@ -394,9 +440,13 @@ class MainWindow(QMainWindow):
         self.btn_auto_enhance.setEnabled(False)
         self.btn_rotate_left.setEnabled(False)
         self.btn_rotate_right.setEnabled(False)
+        self.btn_apply_template.setEnabled(False)
+        self.btn_apply_filter.setEnabled(False)
         self.slider_brightness.setValue(0)
         self.slider_contrast.setValue(0)
         self.combo_color_mode.setCurrentIndex(0)
+        self.combo_template.setCurrentIndex(0)
+        self.combo_filter.setCurrentIndex(0)
         self.status_label.setText("Ready")
     
     def adjust_edges_manually(self):
@@ -448,9 +498,61 @@ class MainWindow(QMainWindow):
                 self.btn_auto_enhance.setEnabled(True)
                 self.btn_rotate_left.setEnabled(True)
                 self.btn_rotate_right.setEnabled(True)
+                self.btn_apply_template.setEnabled(True)
+                self.btn_apply_filter.setEnabled(True)
                 self.status_label.setText("Document scanned with manual edges!")
             else:
                 QMessageBox.warning(self, "Error", "Failed to scan with adjusted edges")
+    
+    def apply_template(self):
+        """Apply selected document template"""
+        if self.scanned_image is None:
+            return
+        
+        template_index = self.combo_template.currentIndex()
+        if template_index == 0:  # "None (Manual)"
+            return
+        
+        template_name = self.combo_template.currentData()
+        
+        try:
+            self.status_label.setText(f"Applying template: {template_name}...")
+            QApplication.processEvents()
+            
+            result = TemplateManager.apply_template(self.scanned_image, template_name)
+            self.scanned_image = result
+            self.display_image(result, self.label_processed)
+            
+            template_display = template_name.replace('_', ' ').title()
+            self.status_label.setText(f"Template '{template_display}' applied")
+        except Exception as e:
+            QMessageBox.critical(self, "Template Error", f"Failed to apply template: {str(e)}")
+            self.status_label.setText("Template application failed")
+    
+    def apply_filter(self):
+        """Apply selected image filter"""
+        if self.scanned_image is None:
+            return
+        
+        filter_index = self.combo_filter.currentIndex()
+        if filter_index == 0:  # "None"
+            return
+        
+        filter_name = self.combo_filter.currentData()
+        
+        try:
+            self.status_label.setText(f"Applying filter: {filter_name}...")
+            QApplication.processEvents()
+            
+            result = FilterManager.apply_filter(self.scanned_image, filter_name)
+            self.scanned_image = result
+            self.display_image(result, self.label_processed)
+            
+            filter_display = filter_name.replace('_', ' ').title()
+            self.status_label.setText(f"Filter '{filter_display}' applied")
+        except Exception as e:
+            QMessageBox.critical(self, "Filter Error", f"Failed to apply filter: {str(e)}")
+            self.status_label.setText("Filter application failed")
     
     def rotate_image(self, angle):
         """Rotate the scanned image"""
