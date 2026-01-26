@@ -6,10 +6,10 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QFileDialog, QComboBox, QSlider, QGroupBox, QMessageBox,
-    QSplitter, QApplication, QProgressDialog
+    QSplitter, QApplication, QProgressDialog, QShortcut, QInputDialog
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtGui import QImage, QPixmap, QKeySequence
 import cv2
 import numpy as np
 
@@ -18,10 +18,13 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.scanner import DocumentScanner
 from src.image_processor import ImageProcessor
 from src.batch_processor import BatchProcessor
+from src.history_manager import HistoryManager
+from src.multi_page_manager import MultiPageManager
 from src.templates import TemplateManager
 from src.filters import FilterManager
 from src import constants
 from gui.edge_adjuster import EdgeAdjusterDialog
+from gui.page_thumbnails import PageThumbnailsWidget
 
 
 class ScannerThread(QThread):
@@ -53,12 +56,15 @@ class MainWindow(QMainWindow):
         self.scanner = DocumentScanner()
         self.processor = ImageProcessor()
         self.batch_processor = BatchProcessor(self.scanner, self.processor)
+        self.history = HistoryManager(max_history=20)
+        self.multi_page = MultiPageManager()
         self.current_image = None
         self.scanned_image = None
         self.rotation_angle = 0
         self.output_folder = "data/output"
         
         self.init_ui()
+        self.setup_shortcuts()
     
     def init_ui(self):
         """Initialize the user interface"""
@@ -134,6 +140,47 @@ class MainWindow(QMainWindow):
         
         scan_group.setLayout(scan_layout)
         layout.addWidget(scan_group)
+        
+        # Undo/Redo group
+        history_group = QGroupBox("History")
+        history_layout = QHBoxLayout()
+        
+        self.btn_undo = QPushButton("↶ Undo")
+        self.btn_undo.clicked.connect(self.undo)
+        self.btn_undo.setEnabled(False)
+        self.btn_undo.setToolTip("Ctrl+Z")
+        history_layout.addWidget(self.btn_undo)
+        
+        self.btn_redo = QPushButton("↷ Redo")
+        self.btn_redo.clicked.connect(self.redo)
+        self.btn_redo.setEnabled(False)
+        self.btn_redo.setToolTip("Ctrl+Y")
+        history_layout.addWidget(self.btn_redo)
+        
+        history_group.setLayout(history_layout)
+        layout.addWidget(history_group)
+        
+        # Multi-Page group
+        multipage_group = QGroupBox("Multi-Page PDF")
+        multipage_layout = QVBoxLayout()
+        
+        self.btn_add_page = QPushButton("➕ Add to Pages")
+        self.btn_add_page.clicked.connect(self.add_to_pages)
+        self.btn_add_page.setEnabled(False)
+        multipage_layout.addWidget(self.btn_add_page)
+        
+        self.btn_export_pdf = QPushButton("📄 Export Multi-Page PDF")
+        self.btn_export_pdf.clicked.connect(self.export_multipage_pdf)
+        self.btn_export_pdf.setEnabled(False)
+        multipage_layout.addWidget(self.btn_export_pdf)
+        
+        self.btn_clear_pages = QPushButton("Clear All Pages")
+        self.btn_clear_pages.clicked.connect(self.clear_all_pages)
+        self.btn_clear_pages.setEnabled(False)
+        multipage_layout.addWidget(self.btn_clear_pages)
+        
+        multipage_group.setLayout(multipage_layout)
+        layout.addWidget(multipage_group)
         
         # Templates group
         template_group = QGroupBox("Document Templates")
@@ -259,8 +306,12 @@ class MainWindow(QMainWindow):
     
     def create_image_panel(self):
         """Create the image display panel"""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        # Create main splitter for image area and page thumbnails
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # Left side - images
+        image_widget = QWidget()
+        layout = QVBoxLayout(image_widget)
         
         # Original image
         layout.addWidget(QLabel("Original Image:"))
@@ -286,7 +337,19 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("padding: 10px; font-style: italic;")
         layout.addWidget(self.status_label)
         
-        return panel
+        splitter.addWidget(image_widget)
+        
+        # Right side - page thumbnails
+        self.page_thumbnails = PageThumbnailsWidget()
+        self.page_thumbnails.page_selected.connect(self.on_page_selected)
+        self.page_thumbnails.page_deleted.connect(self.on_page_deleted)
+        self.page_thumbnails.setMaximumWidth(180)
+        splitter.addWidget(self.page_thumbnails)
+        
+        # Set initial sizes (images larger than thumbnails)
+        splitter.setSizes([800, 180])
+        
+        return splitter
     
     def load_image(self):
         """Load an image from file"""
@@ -338,10 +401,15 @@ class MainWindow(QMainWindow):
         self.btn_auto_enhance.setEnabled(True)
         self.btn_rotate_left.setEnabled(True)
         self.btn_rotate_right.setEnabled(True)
+        self.btn_add_page.setEnabled(True)
         self.btn_scan.setEnabled(True)
         self.btn_apply_template.setEnabled(True)
         self.btn_apply_filter.setEnabled(True)
         self.status_label.setText("Document scanned successfully!")
+        
+        # Add to history
+        self.history.clear()  # Clear old history on new scan
+        self.add_history_state("Initial scan")
         
         # Show preview with detection
         preview = self.scanner.get_preview_with_detection(self.current_image)
@@ -432,6 +500,7 @@ class MainWindow(QMainWindow):
         self.current_image = None
         self.scanned_image = None
         self.rotation_angle = 0
+        self.history.clear()
         self.label_original.clear()
         self.label_processed.clear()
         self.btn_scan.setEnabled(False)
@@ -440,8 +509,10 @@ class MainWindow(QMainWindow):
         self.btn_auto_enhance.setEnabled(False)
         self.btn_rotate_left.setEnabled(False)
         self.btn_rotate_right.setEnabled(False)
+        self.btn_add_page.setEnabled(False)
         self.btn_apply_template.setEnabled(False)
         self.btn_apply_filter.setEnabled(False)
+        self.update_history_buttons()
         self.slider_brightness.setValue(0)
         self.slider_contrast.setValue(0)
         self.combo_color_mode.setCurrentIndex(0)
@@ -498,9 +569,14 @@ class MainWindow(QMainWindow):
                 self.btn_auto_enhance.setEnabled(True)
                 self.btn_rotate_left.setEnabled(True)
                 self.btn_rotate_right.setEnabled(True)
+                self.btn_add_page.setEnabled(True)
                 self.btn_apply_template.setEnabled(True)
                 self.btn_apply_filter.setEnabled(True)
                 self.status_label.setText("Document scanned with manual edges!")
+                
+                # Add to history
+                self.history.clear()
+                self.add_history_state("Manual edge adjustment")
             else:
                 QMessageBox.warning(self, "Error", "Failed to scan with adjusted edges")
     
@@ -525,6 +601,7 @@ class MainWindow(QMainWindow):
             
             template_display = template_name.replace('_', ' ').title()
             self.status_label.setText(f"Template '{template_display}' applied")
+            self.add_history_state(f"Apply template: {template_display}")
         except Exception as e:
             QMessageBox.critical(self, "Template Error", f"Failed to apply template: {str(e)}")
             self.status_label.setText("Template application failed")
@@ -550,6 +627,7 @@ class MainWindow(QMainWindow):
             
             filter_display = filter_name.replace('_', ' ').title()
             self.status_label.setText(f"Filter '{filter_display}' applied")
+            self.add_history_state(f"Apply filter: {filter_display}")
         except Exception as e:
             QMessageBox.critical(self, "Filter Error", f"Failed to apply filter: {str(e)}")
             self.status_label.setText("Filter application failed")
@@ -566,6 +644,7 @@ class MainWindow(QMainWindow):
         # Reapply current enhancements
         self.apply_enhancements()
         self.status_label.setText(f"Rotated {angle}\u00b0")
+        self.add_history_state(f"Rotate {angle}°")
     
     def batch_process(self):
         """Process multiple images from a folder"""
@@ -654,6 +733,194 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Batch Processing Error", str(e))
             else:
                 self.status_label.setText("Batch processing cancelled")
+    
+    def setup_shortcuts(self):
+        """Setup keyboard shortcuts"""
+        # Undo/Redo shortcuts
+        QShortcut(QKeySequence.Undo, self, self.undo)
+        QShortcut(QKeySequence.Redo, self, self.redo)
+        
+        # Save shortcut
+        QShortcut(QKeySequence.Save, self, self.save_result)
+        
+        # Open shortcut
+        QShortcut(QKeySequence.Open, self, self.load_image)
+    
+    def add_history_state(self, description: str = ""):
+        """Add current state to history"""
+        if self.scanned_image is not None:
+            settings = {
+                'brightness': self.slider_brightness.value(),
+                'contrast': self.slider_contrast.value(),
+                'color_mode': self.combo_color_mode.currentIndex(),
+                'rotation': self.rotation_angle
+            }
+            self.history.add_state(self.scanned_image, description, settings)
+            self.update_history_buttons()
+    
+    def update_history_buttons(self):
+        """Update undo/redo button states"""
+        self.btn_undo.setEnabled(self.history.can_undo())
+        self.btn_redo.setEnabled(self.history.can_redo())
+    
+    def undo(self):
+        """Undo to previous state"""
+        state = self.history.undo()
+        if state:
+            self.scanned_image = state.get_image()
+            
+            # Restore settings
+            settings = state.settings
+            if settings:
+                self.slider_brightness.setValue(settings.get('brightness', 0))
+                self.slider_contrast.setValue(settings.get('contrast', 0))
+                self.combo_color_mode.setCurrentIndex(settings.get('color_mode', 0))
+                self.rotation_angle = settings.get('rotation', 0)
+            
+            self.display_image(self.scanned_image, self.label_processed)
+            self.status_label.setText(f"Undo: {state.description}")
+            self.update_history_buttons()
+    
+    def redo(self):
+        """Redo to next state"""
+        state = self.history.redo()
+        if state:
+            self.scanned_image = state.get_image()
+            
+            # Restore settings
+            settings = state.settings
+            if settings:
+                self.slider_brightness.setValue(settings.get('brightness', 0))
+                self.slider_contrast.setValue(settings.get('contrast', 0))
+                self.combo_color_mode.setCurrentIndex(settings.get('color_mode', 0))
+                self.rotation_angle = settings.get('rotation', 0)
+            
+            self.display_image(self.scanned_image, self.label_processed)
+            self.status_label.setText(f"Redo: {state.description}")
+            self.update_history_buttons()
+    
+    def add_to_pages(self):
+        """Add current scanned image to multi-page document"""
+        if self.scanned_image is None:
+            return
+        
+        # Get page name
+        page_num = self.multi_page.get_page_count() + 1
+        name, ok = QInputDialog.getText(
+            self,
+            "Add Page",
+            "Page name:",
+            text=f"Page {page_num}"
+        )
+        
+        if ok:
+            # Get current processed image with all enhancements
+            result = self.scanned_image.copy()
+            
+            # Apply current enhancements
+            brightness = self.slider_brightness.value()
+            contrast = self.slider_contrast.value()
+            if brightness != 0 or contrast != 0:
+                result = self.processor.adjust_brightness_contrast(
+                    result, brightness, contrast
+                )
+            
+            # Apply color mode
+            mode = self.combo_color_mode.currentText()
+            if mode == "Black & White":
+                result = self.processor.convert_to_bw(result)
+            elif mode == "Grayscale":
+                if len(result.shape) == 3:
+                    result = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
+            
+            # Add to multi-page manager
+            self.multi_page.add_page(result, name)
+            
+            # Add thumbnail
+            self.page_thumbnails.add_page(result, name)
+            
+            # Enable export button
+            self.btn_export_pdf.setEnabled(True)
+            self.btn_clear_pages.setEnabled(True)
+            
+            self.status_label.setText(f"Added: {name} ({self.multi_page.get_page_count()} pages total)")
+    
+    def on_page_selected(self, index: int):
+        """Handle page selection from thumbnails"""
+        page = self.multi_page.get_page(index)
+        if page:
+            self.display_image(page.get_image(), self.label_processed)
+            self.status_label.setText(f"Viewing: {page.name}")
+    
+    def on_page_deleted(self, index: int):
+        """Handle page deletion"""
+        reply = QMessageBox.question(
+            self,
+            "Delete Page",
+            f"Delete page {index + 1}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            page = self.multi_page.get_page(index)
+            if page:
+                page_name = page.name
+                self.multi_page.remove_page(index)
+                self.page_thumbnails.remove_page(index)
+                self.status_label.setText(f"Deleted: {page_name}")
+                
+                # Disable export if no pages left
+                if self.multi_page.get_page_count() == 0:
+                    self.btn_export_pdf.setEnabled(False)
+                    self.btn_clear_pages.setEnabled(False)
+    
+    def export_multipage_pdf(self):
+        """Export all pages as a multi-page PDF"""
+        if self.multi_page.get_page_count() == 0:
+            QMessageBox.warning(self, "No Pages", "No pages to export")
+            return
+        
+        # Get output file
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Multi-Page PDF",
+            "multipage_document.pdf",
+            "PDF Files (*.pdf)"
+        )
+        
+        if file_path:
+            # Ensure .pdf extension
+            if not file_path.lower().endswith('.pdf'):
+                file_path += '.pdf'
+            
+            # Export
+            success = self.multi_page.export_to_pdf(file_path, page_size='A4')
+            
+            if success:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Exported {self.multi_page.get_page_count()}-page PDF:\n{file_path}"
+                )
+                self.status_label.setText(f"Exported {self.multi_page.get_page_count()} pages to PDF")
+            else:
+                QMessageBox.critical(self, "Error", "Failed to export PDF")
+    
+    def clear_all_pages(self):
+        """Clear all pages from multi-page document"""
+        reply = QMessageBox.question(
+            self,
+            "Clear All Pages",
+            f"Delete all {self.multi_page.get_page_count()} pages?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.multi_page.clear_all()
+            self.page_thumbnails.clear_all()
+            self.btn_export_pdf.setEnabled(False)
+            self.btn_clear_pages.setEnabled(False)
+            self.status_label.setText("All pages cleared")
     
     def display_image(self, cv_image, label):
         """Display OpenCV image in QLabel"""
