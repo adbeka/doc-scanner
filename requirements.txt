@@ -13,6 +13,9 @@ PyQt5>=5.15.0
 PyYAML>=6.0
 reportlab>=4.0.0
 
+# OCR Support (Optional but recommended)
+pytesseract>=0.3.10
+
 # Development & Testing
 pytest>=7.4.0
 pytest-qt>=4.2.0

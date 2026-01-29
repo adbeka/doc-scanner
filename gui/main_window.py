@@ -22,6 +22,10 @@ from src.history_manager import HistoryManager
 from src.multi_page_manager import MultiPageManager
 from src.templates import TemplateManager
 from src.filters import FilterManager
+from src.ocr_engine import OCREngine
+from src.auto_enhance import AutoEnhancer
+from src.annotations import AnnotationTools, AnnotationType
+from src.document_compare import DocumentComparator
 from src import constants
 from gui.edge_adjuster import EdgeAdjusterDialog
 from gui.page_thumbnails import PageThumbnailsWidget
@@ -58,8 +62,13 @@ class MainWindow(QMainWindow):
         self.batch_processor = BatchProcessor(self.scanner, self.processor)
         self.history = HistoryManager(max_history=20)
         self.multi_page = MultiPageManager()
+        self.ocr_engine = OCREngine()
+        self.auto_enhancer = AutoEnhancer()
+        self.annotator = AnnotationTools()
+        self.comparator = DocumentComparator()
         self.current_image = None
         self.scanned_image = None
+        self.comparison_image = None  # For document comparison
         self.rotation_angle = 0
         self.output_folder = "data/output"
         
@@ -223,6 +232,89 @@ class MainWindow(QMainWindow):
         
         filter_group.setLayout(filter_layout)
         layout.addWidget(filter_group)
+        
+        # OCR group
+        ocr_group = QGroupBox("OCR (Text Recognition)")
+        ocr_layout = QVBoxLayout()
+        
+        self.btn_extract_text = QPushButton("📝 Extract Text")
+        self.btn_extract_text.clicked.connect(self.extract_text)
+        self.btn_extract_text.setEnabled(False)
+        ocr_layout.addWidget(self.btn_extract_text)
+        
+        self.btn_auto_name = QPushButton("🏷️ Auto-Name File")
+        self.btn_auto_name.clicked.connect(self.auto_name_file)
+        self.btn_auto_name.setEnabled(False)
+        ocr_layout.addWidget(self.btn_auto_name)
+        
+        ocr_group.setLayout(ocr_layout)
+        layout.addWidget(ocr_group)
+        
+        # Auto Enhancement group  
+        auto_group = QGroupBox("Auto Enhancement")
+        auto_layout = QVBoxLayout()
+        
+        self.btn_auto_deskew = QPushButton("📐 Auto Deskew")
+        self.btn_auto_deskew.clicked.connect(self.auto_deskew)
+        self.btn_auto_deskew.setEnabled(False)
+        auto_layout.addWidget(self.btn_auto_deskew)
+        
+        self.btn_auto_crop = QPushButton("✂️ Auto Crop")
+        self.btn_auto_crop.clicked.connect(self.auto_crop)
+        self.btn_auto_crop.setEnabled(False)
+        auto_layout.addWidget(self.btn_auto_crop)
+        
+        self.btn_full_enhance = QPushButton("✨ Full Auto Enhancement")
+        self.btn_full_enhance.clicked.connect(self.full_auto_enhance)
+        self.btn_full_enhance.setEnabled(False)
+        auto_layout.addWidget(self.btn_full_enhance)
+        
+        auto_group.setLayout(auto_layout)
+        layout.addWidget(auto_group)
+        
+        # Annotations group
+        annotation_group = QGroupBox("Annotations")
+        annotation_layout = QVBoxLayout()
+        
+        self.combo_annotation = QComboBox()
+        self.combo_annotation.addItem("Select Tool...")
+        self.combo_annotation.addItem("Add Text")
+        self.combo_annotation.addItem("Add Rectangle")
+        self.combo_annotation.addItem("Add Highlight")
+        self.combo_annotation.addItem("Add Arrow")
+        self.combo_annotation.addItem("Add Stamp")
+        self.combo_annotation.addItem("Add Date")
+        annotation_layout.addWidget(self.combo_annotation)
+        
+        self.btn_add_annotation = QPushButton("➕ Add Annotation")
+        self.btn_add_annotation.clicked.connect(self.add_annotation)
+        self.btn_add_annotation.setEnabled(False)
+        annotation_layout.addWidget(self.btn_add_annotation)
+        
+        self.btn_clear_annotations = QPushButton("Clear Annotations")
+        self.btn_clear_annotations.clicked.connect(self.clear_annotations)
+        self.btn_clear_annotations.setEnabled(False)
+        annotation_layout.addWidget(self.btn_clear_annotations)
+        
+        annotation_group.setLayout(annotation_layout)
+        layout.addWidget(annotation_group)
+        
+        # Document Comparison group
+        compare_group = QGroupBox("Document Comparison")
+        compare_layout = QVBoxLayout()
+        
+        self.btn_load_compare = QPushButton("📊 Load Document to Compare")
+        self.btn_load_compare.clicked.connect(self.load_comparison_doc)
+        self.btn_load_compare.setEnabled(False)
+        compare_layout.addWidget(self.btn_load_compare)
+        
+        self.btn_compare = QPushButton("🔍 Compare Documents")
+        self.btn_compare.clicked.connect(self.compare_documents)
+        self.btn_compare.setEnabled(False)
+        compare_layout.addWidget(self.btn_compare)
+        
+        compare_group.setLayout(compare_layout)
+        layout.addWidget(compare_group)
         
         # Enhancement group
         enhance_group = QGroupBox("Enhancement")
@@ -405,6 +497,14 @@ class MainWindow(QMainWindow):
         self.btn_scan.setEnabled(True)
         self.btn_apply_template.setEnabled(True)
         self.btn_apply_filter.setEnabled(True)
+        # Enable new features
+        self.btn_extract_text.setEnabled(True)
+        self.btn_auto_name.setEnabled(True)
+        self.btn_auto_deskew.setEnabled(True)
+        self.btn_auto_crop.setEnabled(True)
+        self.btn_full_enhance.setEnabled(True)
+        self.btn_add_annotation.setEnabled(True)
+        self.btn_load_compare.setEnabled(True)
         self.status_label.setText("Document scanned successfully!")
         
         # Add to history
@@ -921,6 +1021,333 @@ class MainWindow(QMainWindow):
             self.btn_export_pdf.setEnabled(False)
             self.btn_clear_pages.setEnabled(False)
             self.status_label.setText("All pages cleared")
+    
+    def extract_text(self):
+        """Extract text from scanned image using OCR"""
+        if self.scanned_image is None:
+            QMessageBox.warning(self, "No Image", "Please scan a document first")
+            return
+        
+        if not self.ocr_engine.is_available():
+            QMessageBox.warning(
+                self, 
+                "OCR Not Available", 
+                "Tesseract OCR is not installed.\n\nInstall with:\npip install pytesseract\n\n"
+                "And install Tesseract engine from:\nhttps://github.com/tesseract-ocr/tesseract"
+            )
+            return
+        
+        try:
+            self.status_label.setText("Extracting text...")
+            QApplication.processEvents()
+            
+            # Extract text
+            result = self.ocr_engine.extract_text(self.scanned_image)
+            
+            # Show results in dialog
+            from PyQt5.QtWidgets import QTextEdit, QDialog, QVBoxLayout, QPushButton
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Extracted Text")
+            dialog.resize(600, 400)
+            layout = QVBoxLayout()
+            
+            text_edit = QTextEdit()
+            text_edit.setPlainText(result.get_clean_text())
+            layout.addWidget(text_edit)
+            
+            # Add copy button
+            btn_copy = QPushButton("Copy to Clipboard")
+            btn_copy.clicked.connect(lambda: QApplication.clipboard().setText(result.get_clean_text()))
+            layout.addWidget(btn_copy)
+            
+            # Show confidence
+            confidence_label = QLabel(f"Average Confidence: {result.confidence:.1f}%")
+            layout.addWidget(confidence_label)
+            
+            dialog.setLayout(layout)
+            dialog.exec_()
+            
+            self.status_label.setText(f"Text extracted ({len(result.get_words())} words, {result.confidence:.1f}% confidence)")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "OCR Error", f"Failed to extract text:\n{str(e)}")
+            self.status_label.setText("Text extraction failed")
+    
+    def auto_name_file(self):
+        """Automatically name file based on OCR text"""
+        if self.scanned_image is None:
+            QMessageBox.warning(self, "No Image", "Please scan a document first")
+            return
+        
+        if not self.ocr_engine.is_available():
+            QMessageBox.warning(self, "OCR Not Available", "Tesseract OCR is not installed")
+            return
+        
+        try:
+            self.status_label.setText("Analyzing document...")
+            QApplication.processEvents()
+            
+            # Extract text
+            text = self.ocr_engine.extract_text_simple(self.scanned_image)
+            
+            # Generate filename
+            suggested_name = self.ocr_engine.auto_name_from_text(text)
+            
+            # Ask user to confirm/edit
+            name, ok = QInputDialog.getText(
+                self, 
+                "Auto-Name File", 
+                "Suggested filename:",
+                text=suggested_name
+            )
+            
+            if ok and name:
+                # Save with suggested name
+                format_ext = self.combo_format.currentText().lower()
+                file_path = os.path.join(self.output_folder, f"{name}.{format_ext}")
+                
+                # Ensure directory exists
+                os.makedirs(self.output_folder, exist_ok=True)
+                
+                # Save file
+                if format_ext == 'pdf':
+                    from PIL import Image
+                    pil_image = Image.fromarray(cv2.cvtColor(self.scanned_image, cv2.COLOR_BGR2RGB))
+                    pil_image.save(file_path)
+                else:
+                    cv2.imwrite(file_path, self.scanned_image)
+                
+                QMessageBox.information(self, "Success", f"Saved as:\n{file_path}")
+                self.status_label.setText(f"Saved as {name}.{format_ext}")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Auto-Name Error", f"Failed to auto-name file:\n{str(e)}")
+    
+    def auto_deskew(self):
+        """Automatically deskew the image"""
+        if self.scanned_image is None:
+            QMessageBox.warning(self, "No Image", "Please scan a document first")
+            return
+        
+        try:
+            self.status_label.setText("Auto-deskewing...")
+            QApplication.processEvents()
+            
+            # Deskew
+            deskewed, angle = self.auto_enhancer.auto_deskew(self.scanned_image)
+            
+            # Update image
+            self.add_history_state("Auto Deskew")
+            self.scanned_image = deskewed
+            self.display_image(self.scanned_image, self.label_processed)
+            
+            self.status_label.setText(f"Deskewed by {angle:.2f}°")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Deskew Error", f"Failed to deskew:\n{str(e)}")
+    
+    def auto_crop(self):
+        """Automatically crop the image"""
+        if self.scanned_image is None:
+            QMessageBox.warning(self, "No Image", "Please scan a document first")
+            return
+        
+        try:
+            self.status_label.setText("Auto-cropping...")
+            QApplication.processEvents()
+            
+            # Crop
+            cropped = self.auto_enhancer.auto_crop(self.scanned_image)
+            
+            # Update image
+            self.add_history_state("Auto Crop")
+            self.scanned_image = cropped
+            self.display_image(self.scanned_image, self.label_processed)
+            
+            self.status_label.setText("Image auto-cropped")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Crop Error", f"Failed to crop:\n{str(e)}")
+    
+    def full_auto_enhance(self):
+        """Apply full automatic enhancement pipeline"""
+        if self.scanned_image is None:
+            QMessageBox.warning(self, "No Image", "Please scan a document first")
+            return
+        
+        try:
+            self.status_label.setText("Applying full enhancement...")
+            QApplication.processEvents()
+            
+            # Apply full enhancement
+            enhanced = self.auto_enhancer.enhance_document(self.scanned_image)
+            
+            # Update image
+            self.add_history_state("Full Auto Enhancement")
+            self.scanned_image = enhanced
+            self.display_image(self.scanned_image, self.label_processed)
+            
+            self.status_label.setText("Full auto enhancement applied")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Enhancement Error", f"Failed to enhance:\n{str(e)}")
+    
+    def add_annotation(self):
+        """Add annotation to document"""
+        if self.scanned_image is None:
+            QMessageBox.warning(self, "No Image", "Please scan a document first")
+            return
+        
+        annotation_type = self.combo_annotation.currentText()
+        
+        try:
+            self.add_history_state(f"Add {annotation_type}")
+            
+            # Get image center for positioning
+            h, w = self.scanned_image.shape[:2]
+            center_x, center_y = w // 2, h // 2
+            
+            if annotation_type == "Add Text":
+                text, ok = QInputDialog.getText(self, "Add Text", "Enter text:")
+                if ok and text:
+                    self.scanned_image = self.annotator.add_text(
+                        self.scanned_image, text, (50, 50), font_scale=1.0, background=True
+                    )
+            
+            elif annotation_type == "Add Rectangle":
+                # Add rectangle in center
+                self.scanned_image = self.annotator.add_rectangle(
+                    self.scanned_image, 
+                    (center_x - 100, center_y - 50),
+                    (center_x + 100, center_y + 50),
+                    color=(0, 0, 255)
+                )
+            
+            elif annotation_type == "Add Highlight":
+                # Add highlight in center
+                self.scanned_image = self.annotator.add_highlight(
+                    self.scanned_image,
+                    (center_x - 150, center_y - 30, 300, 60),
+                    color=(0, 255, 255),
+                    alpha=0.3
+                )
+            
+            elif annotation_type == "Add Arrow":
+                # Add arrow pointing to center
+                self.scanned_image = self.annotator.add_arrow(
+                    self.scanned_image,
+                    (center_x - 150, center_y - 150),
+                    (center_x, center_y),
+                    color=(255, 0, 0),
+                    thickness=3
+                )
+            
+            elif annotation_type == "Add Stamp":
+                stamps = ["approved", "confidential", "draft", "urgent", "rejected"]
+                stamp, ok = QInputDialog.getItem(
+                    self, "Select Stamp", "Choose stamp type:", stamps, 0, False
+                )
+                if ok:
+                    self.scanned_image = self.annotator.add_stamp(
+                        self.scanned_image, stamp, (center_x, center_y), size=100
+                    )
+            
+            elif annotation_type == "Add Date":
+                self.scanned_image = self.annotator.add_date_stamp(
+                    self.scanned_image, (50, h - 30)
+                )
+            
+            self.display_image(self.scanned_image, self.label_processed)
+            self.status_label.setText(f"{annotation_type} added")
+            self.btn_clear_annotations.setEnabled(True)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Annotation Error", f"Failed to add annotation:\n{str(e)}")
+    
+    def clear_annotations(self):
+        """Clear all annotations"""
+        self.annotator.clear_annotations()
+        self.btn_clear_annotations.setEnabled(False)
+        self.status_label.setText("Annotations cleared")
+    
+    def load_comparison_doc(self):
+        """Load a second document for comparison"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Document to Compare",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.tiff)"
+        )
+        
+        if file_path:
+            try:
+                self.comparison_image = cv2.imread(file_path)
+                if self.comparison_image is not None:
+                    self.btn_compare.setEnabled(True)
+                    self.status_label.setText("Comparison document loaded")
+                else:
+                    QMessageBox.critical(self, "Error", "Failed to load comparison document")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load image:\n{str(e)}")
+    
+    def compare_documents(self):
+        """Compare current document with loaded comparison document"""
+        if self.scanned_image is None:
+            QMessageBox.warning(self, "No Image", "Please scan a document first")
+            return
+        
+        if self.comparison_image is None:
+            QMessageBox.warning(self, "No Comparison Document", "Please load a document to compare")
+            return
+        
+        try:
+            self.status_label.setText("Comparing documents...")
+            QApplication.processEvents()
+            
+            # Compare documents
+            comparison, differences = self.comparator.compare_documents(
+                self.scanned_image, self.comparison_image
+            )
+            
+            # Calculate similarity
+            similarity = self.comparator.calculate_similarity(
+                self.scanned_image, self.comparison_image
+            )
+            
+            # Show side-by-side comparison
+            side_by_side = self.comparator.compare_side_by_side(
+                self.scanned_image, self.comparison_image
+            )
+            
+            # Display comparison
+            self.display_image(side_by_side, self.label_processed)
+            
+            # Show results dialog
+            summary = self.comparator.get_difference_summary(differences)
+            report = self.comparator.generate_comparison_report(
+                self.scanned_image, self.comparison_image, differences
+            )
+            
+            from PyQt5.QtWidgets import QTextEdit, QDialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Comparison Results")
+            dialog.resize(600, 400)
+            layout = QVBoxLayout()
+            
+            text_edit = QTextEdit()
+            text_edit.setPlainText(report)
+            text_edit.setReadOnly(True)
+            layout.addWidget(text_edit)
+            
+            dialog.setLayout(layout)
+            dialog.exec_()
+            
+            self.status_label.setText(
+                f"Similarity: {similarity:.1f}% | {summary['total']} differences found"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Comparison Error", f"Failed to compare documents:\n{str(e)}")
     
     def display_image(self, cv_image, label):
         """Display OpenCV image in QLabel"""
